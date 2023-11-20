@@ -624,7 +624,8 @@ public:
          const TUScheduler::Options &Opts, ParsingCallbacks &Callbacks);
   ~ASTWorker();
 
-  void update(ParseInputs Inputs, WantDiagnostics, bool ContentChanged, std::optional<std::vector<std::string>> SourceInclides);
+  void update(ParseInputs Inputs, WantDiagnostics, bool ContentChanged,
+              std::optional<std::vector<std::string>> SourceInclides);
   void
   runWithAST(llvm::StringRef Name,
              llvm::unique_function<void(llvm::Expected<InputsAndAST>)> Action,
@@ -859,7 +860,8 @@ ASTWorker::~ASTWorker() {
 }
 
 void ASTWorker::update(ParseInputs Inputs, WantDiagnostics WantDiags,
-                       bool ContentChanged, std::optional<std::vector<std::string>> SourceInclides) {
+                       bool ContentChanged,
+                       std::optional<std::vector<std::string>> SourceInclides) {
   llvm::StringLiteral TaskName = "Update";
   auto Task = [=]() mutable {
     // Get the actual command as `Inputs` does not have a command.
@@ -1707,7 +1709,7 @@ bool TUScheduler::update(PathRef File, ParseInputs Inputs,
     if (auto CorrespondingFile =
             clang::clangd::getCorrespondingHeaderOrSource(File, std::move(VFS)))
       SourceFile = *CorrespondingFile;
-    if (SourceFile.empty())
+    if (SourceFile.empty()) // fallback to find pair source
       SourceFile = HeaderIncluders->get(File);
     if (!SourceFile.empty() && Files.contains(SourceFile)) {
       std::unique_ptr<FileData> &FD = Files[SourceFile];
@@ -1720,13 +1722,13 @@ bool TUScheduler::update(PathRef File, ParseInputs Inputs,
             if (H.Resolved == File) {
               if (isSystem(H.FileKind))
                 Includes.clear();
+              else
+                SourceInclides = std::move(Includes);
               break;
             }
             auto Include = "-include" + H.Resolved;
             Includes.push_back(std::move(Include));
           }
-          if (!Includes.empty())
-            SourceInclides = std::move(Includes);
           IdleASTs->put(FD->Worker.lock().get(), std::move(AST.value()));
         }
       }
